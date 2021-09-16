@@ -17,8 +17,6 @@ namespace Christofel.Scheduler.Triggers
     /// </summary>
     public class DelayedTrigger : ITrigger
     {
-        private bool _executed;
-
         /// <summary>
         /// Initializes a new instance of the <see cref="DelayedTrigger"/> class.
         /// </summary>

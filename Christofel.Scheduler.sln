@@ -8,6 +8,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tests", "Tests", "{7B6FA33C
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Christofel.Scheduler.Example", "src\Christofel.Scheduler.Example\Christofel.Scheduler.Example.csproj", "{5432A202-EA1D-4E4F-8B33-D9956EFCFD33}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Christofel.Scheduler.Abstractions", "src\Christofel.Scheduler.Abstractions\Christofel.Scheduler.Abstractions.csproj", "{C649EC09-9FBE-46AF-9A26-A8C51AC4636B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -22,6 +24,10 @@ Global
 		{5432A202-EA1D-4E4F-8B33-D9956EFCFD33}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{5432A202-EA1D-4E4F-8B33-D9956EFCFD33}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{5432A202-EA1D-4E4F-8B33-D9956EFCFD33}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C649EC09-9FBE-46AF-9A26-A8C51AC4636B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C649EC09-9FBE-46AF-9A26-A8C51AC4636B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C649EC09-9FBE-46AF-9A26-A8C51AC4636B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C649EC09-9FBE-46AF-9A26-A8C51AC4636B}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{5432A202-EA1D-4E4F-8B33-D9956EFCFD33} = {C33C9000-A3DB-4A24-939E-FE3E11FFD7F3}

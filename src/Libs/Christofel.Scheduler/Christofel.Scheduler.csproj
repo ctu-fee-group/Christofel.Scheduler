@@ -2,6 +2,7 @@
 
     <PropertyGroup>
         <TargetFramework>net5.0</TargetFramework>
+        <Nullable>enable</Nullable>
     </PropertyGroup>
 
     <ItemGroup>
@@ -10,6 +11,10 @@
       <PackageReference Include="Nito.AsyncEx" Version="5.1.0" />
       <PackageReference Include="Nito.AsyncEx.Interop.WaitHandles" Version="5.1.0" />
       <PackageReference Include="Remora.Results" Version="7.0.0" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\..\Christofel.Scheduler.Abstractions\Christofel.Scheduler.Abstractions.csproj" />
     </ItemGroup>
 
 </Project>

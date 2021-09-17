@@ -71,7 +71,8 @@ namespace Christofel.Scheduling
                     }
                     catch (Exception e)
                     {
-                        _logger.LogCritical(e, "There was an exception inside of SchedulerThread. The Scheduler won't work correctly.");
+                        _logger.LogCritical(e,
+                            "There was an exception inside of SchedulerThread. The Scheduler won't work correctly.");
                     }
                 });
         }
@@ -149,7 +150,7 @@ namespace Christofel.Scheduling
                             var removeResult = await _jobStore.RemoveJobAsync(job.Key);
                             if (!removeResult.IsSuccess)
                             {
-                                _logger.LogError("Could not remove job {Job} from the store", job.Key);
+                                _logger.LogResult(removeResult, $"Could not remove job {job.Key} from the store");
                             }
 
                             continue;
@@ -203,7 +204,7 @@ namespace Christofel.Scheduling
                             if (!beginExecutionResult.IsSuccess)
                             {
                                 // TODO figure out how to handle this state.
-                                _logger.LogError("Could not begin execution of {Job}", job.Key);
+                                _logger.LogResult(beginExecutionResult, $"Could not begin execution of {job.Key}");
                             }
                             else
                             {
@@ -218,14 +219,14 @@ namespace Christofel.Scheduling
                                 var removeResult = await _jobStore.RemoveJobAsync(job.Key);
                                 if (!removeResult.IsSuccess)
                                 {
-                                    _logger.LogError("Could not remove job {Job} from the store", job.Key);
+                                    _logger.LogResult(removeResult, $"Could not remove job {job.Key} from the store");
                                 }
                             }
                         }
                     }
                     catch (OperationCanceledException)
                     {
-                        // ignored
+                        _logger.LogWarning("Encountered operation canceled exception");
                     }
                     catch (Exception e)
                     {
@@ -338,8 +339,10 @@ namespace Christofel.Scheduling
 
                 foreach (var storedDequeued in storedDequeuedList)
                 {
-                    enqueuedJobs.Enqueue(storedDequeued, storedDequeued.Trigger.NextFireDate ?? DateTimeOffset.UnixEpoch);
+                    enqueuedJobs.Enqueue(storedDequeued,
+                        storedDequeued.Trigger.NextFireDate ?? DateTimeOffset.UnixEpoch);
                 }
+
                 storedDequeuedList.Clear();
             }
 

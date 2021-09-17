@@ -93,7 +93,8 @@ namespace Christofel.Scheduling
 
             while (!_cancellationTokenSource.IsCancellationRequested)
             {
-                var list = await _jobStore.GetJobsTillAsync(DateTimeOffset.UtcNow.Add(_getJobsTillTimespan));
+                var till = DateTimeOffset.UtcNow.Add(_getJobsTillTimespan);
+                var list = await _jobStore.GetJobsTillAsync(till);
                 var queue = new PriorityQueue<IJobDescriptor, DateTimeOffset>();
                 for (var i = 0; i < list.Count; i++)
                 {
@@ -102,7 +103,7 @@ namespace Christofel.Scheduling
 
                 list = null;
 
-                await CheckNotificationsAsync(queue);
+                await CheckNotificationsAsync(queue, till);
 
                 if (queue.Count == 0 || shouldWaitNext)
                 {
@@ -158,7 +159,7 @@ namespace Christofel.Scheduling
                         {
                             shouldWaitNext = false;
                             queue.Enqueue(job, (DateTimeOffset)fireTime);
-                            await CheckNotificationsAsync(queue);
+                            await CheckNotificationsAsync(queue, till);
                         }
                         else if (!await job.Trigger.CanBeExecutedAsync())
                         {
@@ -235,7 +236,7 @@ namespace Christofel.Scheduling
         }
 
         private async Task<PriorityQueue<IJobDescriptor, DateTimeOffset>> CheckNotificationsAsync
-            (PriorityQueue<IJobDescriptor, DateTimeOffset> enqueuedJobs)
+            (PriorityQueue<IJobDescriptor, DateTimeOffset> enqueuedJobs, DateTimeOffset till)
         {
             var changeJobs = new Dictionary<JobKey, IJobDescriptor?>();
 
@@ -273,11 +274,14 @@ namespace Christofel.Scheduling
 
                         if (storedJob is null)
                         {
-                            enqueuedJobs.Enqueue(job, job.Trigger.NextFireDate ?? DateTimeOffset.UnixEpoch);
+                            if (job.Trigger.NextFireDate > till)
+                            {
+                                enqueuedJobs.Enqueue(job, job.Trigger.NextFireDate ?? DateTimeOffset.UnixEpoch);
+                            }
                         }
                         else if (storedJob != job)
                         {
-                            changeJobs[job.Key] = job;
+                            changeJobs[job.Key] = job.Trigger.NextFireDate > till ? null : job;
                         }
                     }
                 }

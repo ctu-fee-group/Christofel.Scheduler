@@ -37,7 +37,11 @@ namespace Christofel.Scheduler.Example
 
             // hello world that will be executed only once (that is using simple trigger)
             var helloWorldJobData = new TypedJobData<HelloWorldJob>(new JobKey("HelloWorld", "Simple"))
-                .AddData("Where", "Simple"); // Any key is accepted, all values will be passed to the constructor, only types matter.
+                .AddData
+                (
+                    "Where",
+                    "Simple"
+                ); // Any key is accepted, all values will be passed to the constructor, only types matter.
             await scheduler.ScheduleAsync(helloWorldJobData, new SimpleTrigger());
 
             var helloWorldRecurringData = new TypedJobData<HelloWorldJob>(new JobKey("HelloWorld", "Recurring"))
@@ -60,7 +64,7 @@ namespace Christofel.Scheduler.Example
         private static IServiceProvider BuildServiceProvider()
         {
             return new ServiceCollection()
-                .AddLogging(b => b.AddConsole())
+                .AddLogging(b => b.AddSimpleConsole(o => o.IncludeScopes = true))
                 .AddScheduler()
                 .BuildServiceProvider();
         }

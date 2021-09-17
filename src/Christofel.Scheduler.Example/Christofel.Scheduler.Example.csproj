@@ -7,7 +7,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\Libs\Christofel.Scheduler\Christofel.Scheduler.csproj" />
+      <ProjectReference Include="..\Libs\Christofel.Scheduling\Christofel.Scheduling.csproj" />
     </ItemGroup>
 
     <ItemGroup>

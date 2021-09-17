@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net5.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <PackageProjectUrl>https://github.com/ctu-fee-group/Christofel.Scheduler</PackageProjectUrl>
+        <PackageLicenseUrl>https://github.com/ctu-fee-group/Christofel.Scheduler/blob/dev/LICENSE</PackageLicenseUrl>
+        <Authors>ctu-fee-group</Authors>
+        <Title>Christofel.Scheduling.Abstractions</Title>
+        <RootNamespace>Christofel.Scheduling</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <PackageReference Include="Remora.Results" Version="7.0.0" />
+    </ItemGroup>
+
+</Project>

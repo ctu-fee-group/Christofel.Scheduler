@@ -7,7 +7,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using Christofel.Scheduler.Abstractions;
+using Christofel.Scheduling;
 using Microsoft.Extensions.Logging;
 using Remora.Results;
 

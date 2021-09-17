@@ -5,15 +5,13 @@
 //  Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 using System;
-using System.Diagnostics;
 using System.Threading.Tasks;
-using Christofel.Scheduler.Abstractions;
 using Christofel.Scheduler.Example.Data;
 using Christofel.Scheduler.Example.Jobs;
-using Christofel.Scheduler.Extensions;
-using Christofel.Scheduler.Triggers;
+using Christofel.Scheduling;
+using Christofel.Scheduling.Extensions;
+using Christofel.Scheduling.Triggers;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 
 namespace Christofel.Scheduler.Example

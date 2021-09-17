@@ -50,6 +50,7 @@ namespace Christofel.Scheduling
         public virtual async Task<Result<IJobContext>> BeginExecutionAsync
             (IJobDescriptor jobDescriptor, Func<IJobDescriptor, Task> afterExecutionCallback, CancellationToken ct)
         {
+            using var loggerScope = _logger.BeginScope($"Handling job {jobDescriptor.Key}");
             var scope = _services.CreateScope();
             var services = scope.ServiceProvider;
 
@@ -122,6 +123,7 @@ namespace Christofel.Scheduling
             CancellationToken ct
         )
         {
+            using var loggerScope = _logger.BeginScope($"Executing");
             Func<Task<Result>> wrapped = async () =>
             {
                 try

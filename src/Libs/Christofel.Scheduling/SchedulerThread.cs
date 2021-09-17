@@ -71,8 +71,9 @@ namespace Christofel.Scheduling
                     }
                     catch (Exception e)
                     {
-                        _logger.LogCritical(e,
-                            "There was an exception inside of SchedulerThread. The Scheduler won't work correctly.");
+                        _logger.LogCritical(
+                            e,
+                            "There was an exception inside of SchedulerThread. The Scheduler won't work correctly");
                     }
                 });
         }
@@ -339,7 +340,8 @@ namespace Christofel.Scheduling
 
                 foreach (var storedDequeued in storedDequeuedList)
                 {
-                    enqueuedJobs.Enqueue(storedDequeued,
+                    enqueuedJobs.Enqueue(
+                        storedDequeued,
                         storedDequeued.Trigger.NextFireDate ?? DateTimeOffset.UnixEpoch);
                 }
 

@@ -276,7 +276,7 @@ namespace Christofel.Scheduling
 
                         if (storedJob is null)
                         {
-                            if (job.Trigger.NextFireDate > till)
+                            if (job.Trigger.NextFireDate < till)
                             {
                                 enqueuedJobs.Enqueue(job, job.Trigger.NextFireDate ?? DateTimeOffset.UnixEpoch);
                             }

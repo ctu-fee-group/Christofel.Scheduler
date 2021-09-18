@@ -255,6 +255,19 @@ namespace Christofel.Scheduling
                 }
             }
 
+            if (await NotificationBroker.AddedJobs.HasPendingNotifications())
+            {
+                (IDisposable @lock, Queue<IJobDescriptor> jobs) =
+                    await NotificationBroker.AddedJobs.GetNotifications();
+                using (@lock)
+                {
+                    while (jobs.TryDequeue(out var job))
+                    {
+                        enqueuedJobs.Enqueue(job, job.Trigger.NextFireDate ?? DateTimeOffset.UnixEpoch);
+                    }
+                }
+            }
+
             if (await NotificationBroker.ChangedJobs.HasPendingNotifications())
             {
                 (IDisposable @lock, Queue<IJobDescriptor> jobs) =

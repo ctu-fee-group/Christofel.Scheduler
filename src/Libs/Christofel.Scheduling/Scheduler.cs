@@ -63,7 +63,7 @@ namespace Christofel.Scheduling
             var addedResult = await _jobStore.AddJobAsync(jobData, trigger);
             if (addedResult.IsSuccess)
             {
-                await _schedulerThread.NotificationBroker.ChangedJobs.NotifyAsync(addedResult.Entity);
+                await _schedulerThread.NotificationBroker.AddedJobs.NotifyAsync(addedResult.Entity);
             }
 
             return addedResult;

@@ -20,13 +20,19 @@ namespace Christofel.Scheduling
         /// <param name="workResetEvent">The event to be set when there is a new notification.</param>
         public SchedulerThreadNotificationBroker(AsyncAutoResetEvent workResetEvent)
         {
+            AddedJobs = new NotificationBroker<IJobDescriptor>(workResetEvent);
             ChangedJobs = new NotificationBroker<IJobDescriptor>(workResetEvent);
             ExecuteJobs = new NotificationBroker<IJobDescriptor>(workResetEvent);
             RemoveJobs = new NotificationBroker<JobKey>(workResetEvent);
         }
 
         /// <summary>
-        /// Gets notification breaker for jobs that were changed or added.
+        /// Gets notification breaker for jobs that were added.
+        /// </summary>
+        public NotificationBroker<IJobDescriptor> AddedJobs { get; }
+
+        /// <summary>
+        /// Gets notification breaker for jobs that were changed.
         /// </summary>
         public NotificationBroker<IJobDescriptor> ChangedJobs { get; }
 

@@ -89,7 +89,7 @@ namespace Christofel.Scheduling
 
         private async Task Run()
         {
-            HashSet<IJobDescriptor> executingJobs = new HashSet<IJobDescriptor>(new JobDescriptorEqualityComparer());
+            var standbyJobs = new HashSet<JobKey>();
             AsyncLock executingJobsLock = new AsyncLock();
             var shouldWaitNext = false;
 
@@ -132,7 +132,7 @@ namespace Christofel.Scheduling
 
                         using (await executingJobsLock.LockAsync())
                         {
-                            if (executingJobs.Contains(job!))
+                            if (standbyJobs.Contains(job!.Key))
                             {
                                 continue;
                             }
@@ -167,7 +167,7 @@ namespace Christofel.Scheduling
                         {
                             using (await executingJobsLock.LockAsync())
                             {
-                                executingJobs.Add(job);
+                                standbyJobs.Add(job.Key);
                             }
 
                             await job.Trigger.RegisterReadyCallbackAsync
@@ -176,7 +176,7 @@ namespace Christofel.Scheduling
                                 {
                                     using (await executingJobsLock.LockAsync())
                                     {
-                                        executingJobs.Remove(job);
+                                        standbyJobs.Remove(job.Key);
                                     }
 
                                     // TODO decide: should this be cancellable by removing the job?
@@ -194,7 +194,7 @@ namespace Christofel.Scheduling
                                 {
                                     using (await executingJobsLock.LockAsync())
                                     {
-                                        executingJobs.Remove(job);
+                                        standbyJobs.Remove(job.Key);
                                     }
 
                                     await NotificationBroker.ChangedJobs.NotifyAsync(job);
@@ -211,7 +211,7 @@ namespace Christofel.Scheduling
                             {
                                 using (await executingJobsLock.LockAsync())
                                 {
-                                    executingJobs.Add(job);
+                                    standbyJobs.Add(job.Key);
                                 }
                             }
 

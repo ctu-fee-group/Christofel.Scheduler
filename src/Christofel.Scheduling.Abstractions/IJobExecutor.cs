@@ -30,7 +30,7 @@ namespace Christofel.Scheduling
         public Task<Result<IJobContext>> BeginExecutionAsync
         (
             IJobDescriptor jobDescriptor,
-            Func<IJobDescriptor, Task> afterExecutionCallback,
+            Func<IJobDescriptor, Result, Task> afterExecutionCallback,
             CancellationToken ct = default
         );
     }

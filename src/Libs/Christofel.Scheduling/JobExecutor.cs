@@ -8,6 +8,7 @@ using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Christofel.Scheduling.Errors;
 using Christofel.Scheduling.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -48,7 +49,11 @@ namespace Christofel.Scheduling
 
         /// <inheritdoc />
         public virtual async Task<Result<IJobContext>> BeginExecutionAsync
-            (IJobDescriptor jobDescriptor, Func<IJobDescriptor, Task> afterExecutionCallback, CancellationToken ct)
+        (
+            IJobDescriptor jobDescriptor,
+            Func<IJobDescriptor, Result, Task> afterExecutionCallback,
+            CancellationToken ct
+        )
         {
             using var loggerScope = _logger.BeginScope($"Handling job {jobDescriptor.Key}");
             var scope = _services.CreateScope();
@@ -62,20 +67,13 @@ namespace Christofel.Scheduling
             }
 
             var jobContext = new JobContext(jobDescriptor, createdJobResult.Entity, jobDescriptor.Trigger);
-            var beforeEventResult = await _eventExecutors.ExecuteBeforeExecutionAsync(services, jobContext, ct);
-            if (!beforeEventResult.IsSuccess)
-            {
-                _logger.LogResult(beforeEventResult, "Before execution events failed");
-                await _eventExecutors.ExecuteAfterExecutionAsync(services, jobContext, beforeEventResult, ct);
-                scope.Dispose();
-                return Result<IJobContext>.FromError(beforeEventResult);
-            }
 
             var result = await _threadScheduler.ScheduleExecutionAsync
                 ((job, token) => WrappedJobExecutor(scope, job, afterExecutionCallback, token), jobContext, ct);
             if (!result.IsSuccess)
             {
-                _logger.LogResult(result, "Could not schedule execution {Error}");
+                _logger.LogResult(result, "Could not schedule execution");
+                return Result<IJobContext>.FromError(result);
             }
 
             return Result<IJobContext>.FromSuccess(jobContext);
@@ -105,7 +103,8 @@ namespace Christofel.Scheduling
             IJob createdInstance;
             try
             {
-                createdInstance = (IJob)ActivatorUtilities.CreateInstance(services, data.JobType, data.Data.Values.ToArray());
+                createdInstance = (IJob)ActivatorUtilities.CreateInstance
+                    (services, data.JobType, data.Data.Values.ToArray());
             }
             catch (Exception e)
             {
@@ -119,11 +118,24 @@ namespace Christofel.Scheduling
         (
             IServiceScope scope,
             IJobContext jobContext,
-            Func<IJobDescriptor, Task> afterExecutionCallback,
+            Func<IJobDescriptor, Result, Task> afterExecutionCallback,
             CancellationToken ct
         )
         {
             using var loggerScope = _logger.BeginScope($"Executing");
+            var beforeEventResult = await _eventExecutors.ExecuteBeforeExecutionAsync
+                (scope.ServiceProvider, jobContext, ct);
+            if (!beforeEventResult.IsSuccess)
+            {
+                _logger.LogResult(beforeEventResult, "Before execution events failed");
+                await _eventExecutors.ExecuteAfterExecutionAsync
+                    (scope.ServiceProvider, jobContext, beforeEventResult, ct);
+                scope.Dispose();
+                await afterExecutionCallback
+                    (jobContext.JobDescriptor, new BeforeExecutionError(beforeEventResult.Error));
+                return;
+            }
+
             Func<Task<Result>> wrapped = async () =>
             {
                 try
@@ -147,7 +159,11 @@ namespace Christofel.Scheduling
 
             scope.Dispose();
 
-            await afterExecutionCallback(jobContext.JobDescriptor);
+            await afterExecutionCallback
+            (
+                jobContext.JobDescriptor,
+                !afterEventResult.IsSuccess ? new AfterExecutionError(afterEventResult.Error) : Result.FromSuccess()
+            );
         }
 
         private record JobContext(IJobDescriptor JobDescriptor, IJob Job, ITrigger Trigger) : IJobContext;

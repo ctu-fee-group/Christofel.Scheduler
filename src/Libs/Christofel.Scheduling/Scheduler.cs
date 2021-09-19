@@ -63,7 +63,7 @@ namespace Christofel.Scheduling
             var addedResult = await _jobStore.AddJobAsync(jobData, trigger);
             if (addedResult.IsSuccess)
             {
-                await _schedulerThread.NotificationBroker.AddedJobs.NotifyAsync(addedResult.Entity);
+                await _schedulerThread.NotificationBroker.AddedJobs.NotifyAsync(addedResult.Entity, ct);
             }
 
             return addedResult;
@@ -88,11 +88,11 @@ namespace Christofel.Scheduling
             var addedResult = await _jobStore.AddJobAsync(jobResult.Entity.JobData, newTrigger);
             if (addedResult.IsSuccess)
             {
-                await _schedulerThread.NotificationBroker.ChangedJobs.NotifyAsync(addedResult.Entity);
+                await _schedulerThread.NotificationBroker.ChangedJobs.NotifyAsync(addedResult.Entity, ct);
             }
             else
             { // Unfortunately we have to report that the job was removed at this point.
-                await _schedulerThread.NotificationBroker.RemoveJobs.NotifyAsync(jobKey);
+                await _schedulerThread.NotificationBroker.RemoveJobs.NotifyAsync(jobKey, ct);
             }
 
             return addedResult;
@@ -104,7 +104,7 @@ namespace Christofel.Scheduling
             var removedResult = await _jobStore.RemoveJobAsync(jobKey);
             if (removedResult.IsSuccess)
             {
-                await _schedulerThread.NotificationBroker.RemoveJobs.NotifyAsync(jobKey);
+                await _schedulerThread.NotificationBroker.RemoveJobs.NotifyAsync(jobKey, ct);
             }
 
             return removedResult;

@@ -3,7 +3,7 @@
     <PropertyGroup>
         <TargetFramework>net5.0</TargetFramework>
         <Nullable>enable</Nullable>
-        <PackageVersion>0.1.1</PackageVersion>
+        <PackageVersion>0.2.0</PackageVersion>
         <PackageProjectUrl>https://github.com/ctu-fee-group/Christofel.Scheduler</PackageProjectUrl>
         <PackageLicenseUrl>https://github.com/ctu-fee-group/Christofel.Scheduler/blob/master/LICENSE</PackageLicenseUrl>
         <Authors>ctu-fee-group</Authors>

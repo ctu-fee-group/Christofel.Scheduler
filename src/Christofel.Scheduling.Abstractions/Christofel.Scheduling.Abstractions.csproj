@@ -8,7 +8,7 @@
         <Authors>ctu-fee-group</Authors>
         <Title>Christofel.Scheduling.Abstractions</Title>
         <RootNamespace>Christofel.Scheduling</RootNamespace>
-        <PackageVersion>1.1.0</PackageVersion>
+        <PackageVersion>1.2.0</PackageVersion>
     </PropertyGroup>
 
     <ItemGroup>

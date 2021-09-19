@@ -210,6 +210,7 @@ namespace Christofel.Scheduling
                     catch (OperationCanceledException)
                     {
                         _logger.LogWarning("Encountered an operation canceled exception");
+                        break;
                     }
                     catch (Exception e)
                     {
@@ -227,7 +228,7 @@ namespace Christofel.Scheduling
         private async Task<Result<JobExecuteState>> ProcessJobAsync(IJobDescriptor job, CancellationToken ct)
         {
             var fireTime = job.Trigger.NextFireDate;
-            bool notificationInterrupt = false;
+            var notificationInterrupt = false;
 
             // The job is somewhere in the future, wait for it
             // and wait for notifications.
@@ -434,6 +435,8 @@ namespace Christofel.Scheduling
         private async Task CheckNotificationsAsync
             (PriorityQueue<IJobDescriptor, DateTimeOffset> enqueuedJobs, DateTimeOffset till, CancellationToken ct)
         {
+            ct.ThrowIfCancellationRequested();
+
             var changeJobs = new Dictionary<JobKey, IJobDescriptor?>();
 
             await CheckExecuteJobsNotificationsAsync(enqueuedJobs, till, ct);

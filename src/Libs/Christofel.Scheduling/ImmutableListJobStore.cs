@@ -65,6 +65,15 @@ namespace Christofel.Scheduling
         }
 
         /// <inheritdoc />
+        public async ValueTask<Result<bool>> HasJobAsync(JobKey jobKey)
+        {
+            using (await _lock.LockAsync())
+            {
+                return Data.Contains(new JobDescriptor(null!, null!, jobKey));
+            }
+        }
+
+        /// <inheritdoc />
         public ValueTask<Result<IJobDescriptor>> GetJobAsync(JobKey jobKey)
         {
             if (!Data.TryGetValue(new JobDescriptor(null!, null!, jobKey), out var actualValue))

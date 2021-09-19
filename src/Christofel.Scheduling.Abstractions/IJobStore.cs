@@ -32,6 +32,13 @@ namespace Christofel.Scheduling
         public ValueTask<Result> RemoveJobAsync(JobKey jobKey);
 
         /// <summary>
+        /// Returns whether job with the specified key exists in the store.
+        /// </summary>
+        /// <param name="jobKey">The key of the job to be removed.</param>
+        /// <returns>A result that may not have succeeded.</returns>
+        public ValueTask<Result<bool>> HasJobAsync(JobKey jobKey);
+
+        /// <summary>
         /// Gets the specified job from the store.
         /// </summary>
         /// <param name="jobKey">The key of the job to be removed.</param>

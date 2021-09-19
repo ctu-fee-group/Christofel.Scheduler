@@ -70,6 +70,24 @@ namespace Christofel.Scheduling
         }
 
         /// <inheritdoc />
+        public async ValueTask<Result<IJobDescriptor>> ScheduleOrUpdateAsync
+            (IJobData job, ITrigger trigger, CancellationToken ct = default)
+        {
+            var hasJobResult = await _jobStore.HasJobAsync(job.Key);
+            if (!hasJobResult.IsSuccess)
+            {
+                return Result<IJobDescriptor>.FromError(hasJobResult);
+            }
+
+            if (hasJobResult.Entity)
+            {
+                return await ScheduleAsync(job, trigger, ct);
+            }
+
+            return await RemoveAndAddAsync(job.Key, job, trigger, ct);
+        }
+
+        /// <inheritdoc />
         public async ValueTask<Result<IJobDescriptor>> RescheduleAsync
             (JobKey jobKey, ITrigger newTrigger, CancellationToken ct = default)
         {
@@ -79,23 +97,7 @@ namespace Christofel.Scheduling
                 return jobResult;
             }
 
-            var removedResult = await _jobStore.RemoveJobAsync(jobKey);
-            if (!removedResult.IsSuccess)
-            {
-                return Result<IJobDescriptor>.FromError(removedResult);
-            }
-
-            var addedResult = await _jobStore.AddJobAsync(jobResult.Entity.JobData, newTrigger);
-            if (addedResult.IsSuccess)
-            {
-                await _schedulerThread.NotificationBroker.ChangedJobs.NotifyAsync(addedResult.Entity, ct);
-            }
-            else
-            { // Unfortunately we have to report that the job was removed at this point.
-                await _schedulerThread.NotificationBroker.RemoveJobs.NotifyAsync(jobKey, ct);
-            }
-
-            return addedResult;
+            return await RemoveAndAddAsync(jobKey, jobResult.Entity.JobData, newTrigger, ct);
         }
 
         /// <inheritdoc />
@@ -108,6 +110,29 @@ namespace Christofel.Scheduling
             }
 
             return removedResult;
+        }
+
+        private async Task<Result<IJobDescriptor>> RemoveAndAddAsync
+            (JobKey jobKey, IJobData jobData, ITrigger trigger, CancellationToken ct)
+        {
+            var removedResult = await _jobStore.RemoveJobAsync(jobKey);
+            if (!removedResult.IsSuccess)
+            {
+                return Result<IJobDescriptor>.FromError(removedResult);
+            }
+
+            var addedResult = await _jobStore.AddJobAsync(jobData, trigger);
+            if (addedResult.IsSuccess)
+            {
+                await _schedulerThread.NotificationBroker.ChangedJobs.NotifyAsync(addedResult.Entity, ct);
+            }
+            else
+            {
+                // Unfortunately we have to report that the job was removed at this point.
+                await _schedulerThread.NotificationBroker.RemoveJobs.NotifyAsync(jobKey, ct);
+            }
+
+            return addedResult;
         }
     }
 }

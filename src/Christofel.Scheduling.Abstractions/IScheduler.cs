@@ -42,12 +42,23 @@ namespace Christofel.Scheduling
 
         /// <summary>
         /// Schedules the given task that will be executed when <see cref="ITrigger"/> says it should be.
+        /// If task with the same key is already scheduled, error will be returned.
         /// </summary>
         /// <param name="job">The job data that holds information about the job that will be executed.</param>
         /// <param name="trigger">The trigger that schedules the time of the job execution.</param>
         /// <param name="ct">The cancellation token for the operation.</param>
         /// <returns>A <see cref="Task"/> that represents the asynchronous operation.</returns>
         public ValueTask<Result<IJobDescriptor>> ScheduleAsync(IJobData job, ITrigger trigger, CancellationToken ct = default);
+
+        /// <summary>
+        /// Schedules the given task that will be executed when <see cref="ITrigger"/> says it should be.
+        /// If task with the same key is already scheduled, it will be replaced.
+        /// </summary>
+        /// <param name="job">The job data that holds information about the job that will be executed.</param>
+        /// <param name="trigger">The trigger that schedules the time of the job execution.</param>
+        /// <param name="ct">The cancellation token for the operation.</param>
+        /// <returns>A <see cref="Task"/> that represents the asynchronous operation.</returns>
+        public ValueTask<Result<IJobDescriptor>> ScheduleOrUpdateAsync(IJobData job, ITrigger trigger, CancellationToken ct = default);
 
         /// <summary>
         /// Reschedules job with the given key to use the new trigger.

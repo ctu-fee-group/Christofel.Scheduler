@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Christofel.Scheduling.Errors;
 using Nito.AsyncEx;
 using Remora.Results;
 
@@ -39,7 +40,7 @@ namespace Christofel.Scheduling.Triggers
         {
             if (!await _nonConcurrentState.SetRunningAsync(this))
             {
-                return new InvalidOperationError("The task cannot be executed, because there is one already running.");
+                return new RecoverableError("The task cannot be executed, because there is one already running.");
             }
 
             await _nonConcurrentState.SetRunningAsync(this);

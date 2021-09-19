@@ -59,6 +59,17 @@ namespace Christofel.Scheduling
         }
 
         /// <summary>
+        /// Clears the pending notifications.
+        /// </summary>
+        /// <param name="ct">The cancellation token for the operation.</param>
+        /// <returns>A <see cref="Task"/> that represents the asynchronous operation.</returns>
+        public async Task ClearNotificationsAsync(CancellationToken ct = default)
+        {
+            using (await _lock.LockAsync())
+            {
+                _notificationEvents.Clear();
+            }
+        }
         /// Gets notifications along with a lock.
         /// </summary>
         /// <remarks>

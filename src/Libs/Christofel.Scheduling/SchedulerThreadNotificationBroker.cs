@@ -6,6 +6,7 @@
 
 using System.Collections.Generic;
 using Nito.AsyncEx;
+using Remora.Results;
 
 namespace Christofel.Scheduling
 {
@@ -22,7 +23,7 @@ namespace Christofel.Scheduling
         {
             AddedJobs = new NotificationBroker<IJobDescriptor>(workResetEvent);
             ChangedJobs = new NotificationBroker<IJobDescriptor>(workResetEvent);
-            ExecuteJobs = new NotificationBroker<IJobDescriptor>(workResetEvent);
+            ExecuteJobs = new NotificationBroker<(IJobDescriptor Job, Result Result)>(workResetEvent);
             RemoveJobs = new NotificationBroker<JobKey>(workResetEvent);
         }
 
@@ -39,7 +40,7 @@ namespace Christofel.Scheduling
         /// <summary>
         /// Gets notification breaker for jobs that can be executed.
         /// </summary>
-        public NotificationBroker<IJobDescriptor> ExecuteJobs { get; }
+        public NotificationBroker<(IJobDescriptor Job, Result Result)> ExecuteJobs { get; }
 
         /// <summary>
         /// Gets notification breaker for jobs that should be removed.

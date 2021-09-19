@@ -10,6 +10,7 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Threading;
 using System.Threading.Tasks;
+using Christofel.Scheduling.Errors;
 using Christofel.Scheduling.Extensions;
 using Microsoft.Extensions.Logging;
 using Nito.AsyncEx;
@@ -29,6 +30,7 @@ namespace Christofel.Scheduling
         private readonly IJobExecutor _executor;
         private readonly CancellationTokenSource _cancellationTokenSource;
         private readonly AsyncAutoResetEvent _workResetEvent;
+        private readonly HashSet<JobKey> _standbyJobs;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="SchedulerThread"/> class.
@@ -48,6 +50,7 @@ namespace Christofel.Scheduling
             _executor = executor;
             _cancellationTokenSource = new CancellationTokenSource();
 
+            _standbyJobs = new HashSet<JobKey>();
             _workResetEvent = new AsyncAutoResetEvent();
             NotificationBroker = new SchedulerThreadNotificationBroker(_workResetEvent);
         }
@@ -62,7 +65,8 @@ namespace Christofel.Scheduling
         /// </summary>
         public void Start()
         {
-            Task.Run(
+            Task.Run
+            (
                 async () =>
                 {
                     try
@@ -71,11 +75,14 @@ namespace Christofel.Scheduling
                     }
                     catch (Exception e)
                     {
-                        _logger.LogCritical(
+                        _logger.LogCritical
+                        (
                             e,
-                            "There was an exception inside of SchedulerThread. The Scheduler won't work correctly");
+                            "There was an exception inside of SchedulerThread. The Scheduler won't work correctly"
+                        );
                     }
-                });
+                }
+            );
         }
 
         /// <summary>
@@ -87,16 +94,18 @@ namespace Christofel.Scheduling
             _cancellationTokenSource.Cancel();
         }
 
+        /// <summary>
+        /// Processes remaining jobs until stop is called.
+        /// </summary>
         private async Task Run()
         {
-            var standbyJobs = new HashSet<JobKey>();
-            AsyncLock executingJobsLock = new AsyncLock();
-            var shouldWaitNext = false;
-
             while (!_cancellationTokenSource.IsCancellationRequested)
             {
                 var till = DateTimeOffset.UtcNow.Add(_getJobsTillTimespan);
+
+                await ClearNotificationsAsync(); // Notifications are not needed when pulling the jobs from the store.
                 var list = await _jobStore.GetJobsTillAsync(till);
+
                 var queue = new PriorityQueue<IJobDescriptor, DateTimeOffset>();
                 for (var i = 0; i < list.Count; i++)
                 {
@@ -105,129 +114,102 @@ namespace Christofel.Scheduling
 
                 list = null;
 
-                await CheckNotificationsAsync(queue, till);
+                // Should block until "till" time is reached.
+                await ProcessQueueTillAsync(queue, till, _cancellationTokenSource.Token);
+            }
+        }
 
-                if (queue.Count == 0 || shouldWaitNext)
+        private async Task ClearNotificationsAsync()
+        {
+            await NotificationBroker.AddedJobs.ClearNotificationsAsync();
+            await NotificationBroker.ChangedJobs.ClearNotificationsAsync();
+            await NotificationBroker.ExecuteJobs.ClearNotificationsAsync();
+            await NotificationBroker.RemoveJobs.ClearNotificationsAsync();
+        }
+
+        /// <summary>
+        /// Processes the given queue and listens to the notifications until <paramref name="till"/> is reached.
+        /// </summary>
+        /// <param name="queue">The queue of the jobs that are stored until the <paramref name="till"/>.</param>
+        /// <param name="till">The time till this method should block and process both the queue and notifications.</param>
+        private async Task ProcessQueueTillAsync
+            (PriorityQueue<IJobDescriptor, DateTimeOffset> queue, DateTimeOffset till, CancellationToken ct)
+        {
+            // Token that cancels either after "till" is reached or "ct" is canceled.
+            using var delayedCancellationToken = new CancellationTokenSource();
+            delayedCancellationToken.CancelAfter(_getJobsTillTimespan);
+            using var connectedTokenSource = CancellationTokenSource.CreateLinkedTokenSource
+                (delayedCancellationToken.Token, ct);
+
+            while (!ct.IsCancellationRequested || DateTimeOffset.UtcNow <= till)
+            {
+                if (queue.Count == 0)
                 {
-                    shouldWaitNext = false;
-                    using var delayedCancellationToken = new CancellationTokenSource();
-                    delayedCancellationToken.CancelAfter(_getJobsTillTimespan);
-                    await _workResetEvent.WaitSafeAsync(delayedCancellationToken.Token);
+                    var notificationsInterrupt = await _workResetEvent.WaitSafeAsync(connectedTokenSource.Token);
 
-                    continue;
+                    if (!notificationsInterrupt)
+                    {
+                        break; // "till" time was reached, the global Run should take care of things.
+                    }
+
+                    // Notifications have interrupted, so we check them.
+                    await CheckNotificationsAsync(queue, till, ct);
                 }
 
-                shouldWaitNext = true;
-
-                // ReSharper disable once ForCanBeConvertedToForeach
                 while (queue.Count > 0)
                 {
                     try
                     {
-                        var dequeued = queue.TryDequeue(out var job, out _);
-                        if (!dequeued)
+                        if (!queue.TryPeek(out var job, out _))
                         {
-                            break;
+                            break; // The condition of the while should not be met, but ... just to be sure, you know :D
                         }
 
-                        using (await executingJobsLock.LockAsync())
+                        // Stand by jobs is used for currently executing jobs and for jobs that have to wait for execution
+                        if (_standbyJobs.Contains(job.Key))
                         {
-                            if (standbyJobs.Contains(job!.Key))
+                            queue.Dequeue();
+                            continue;
+                        }
+
+                        var result = await ProcessJobAsync(job, _cancellationTokenSource.Token);
+                        var shouldRemove = false;
+                        if (result.IsSuccess)
+                        {
+                            switch (result.Entity)
                             {
-                                continue;
+                                case JobExecuteState.NotificationsInterrupt:
+                                    await CheckNotificationsAsync(queue, till, _cancellationTokenSource.Token);
+                                    break;
+                                case JobExecuteState.None:
+                                    queue.Dequeue();
+                                    break;
+                                case JobExecuteState.RegisteredReadyCallback:
+                                case JobExecuteState.Executing:
+                                    _standbyJobs.Add(job.Key);
+                                    queue.Dequeue();
+                                    break;
                             }
                         }
-
-                        var fireTime = job!.Trigger.NextFireDate;
-                        if (fireTime is not null && fireTime > DateTimeOffset.UtcNow)
+                        else
                         {
-                            using var delayedCancellationToken = new CancellationTokenSource();
-                            delayedCancellationToken.CancelAfter((DateTimeOffset)fireTime - DateTimeOffset.UtcNow);
-                            await _workResetEvent.WaitSafeAsync(delayedCancellationToken.Token);
+                            _logger.LogResult(result, $"Could not execute job {job.Key}, the job will be removed from the queue and store.");
+                            queue.Dequeue();
+                            shouldRemove = true;
                         }
-                        else if (fireTime is null)
+
+                        if (shouldRemove || job.Trigger.NextFireDate is null)
                         {
-                            shouldWaitNext = false;
                             var removeResult = await _jobStore.RemoveJobAsync(job.Key);
                             if (!removeResult.IsSuccess)
                             {
                                 _logger.LogResult(removeResult, $"Could not remove job {job.Key} from the store");
                             }
-
-                            continue;
-                        }
-
-                        if (fireTime > DateTimeOffset.UtcNow)
-                        {
-                            shouldWaitNext = false;
-                            queue.Enqueue(job, (DateTimeOffset)fireTime);
-                            await CheckNotificationsAsync(queue, till);
-                        }
-                        else if (!await job.Trigger.CanBeExecutedAsync())
-                        {
-                            using (await executingJobsLock.LockAsync())
-                            {
-                                standbyJobs.Add(job.Key);
-                            }
-
-                            await job.Trigger.RegisterReadyCallbackAsync
-                            (
-                                async () =>
-                                {
-                                    using (await executingJobsLock.LockAsync())
-                                    {
-                                        standbyJobs.Remove(job.Key);
-                                    }
-
-                                    // TODO decide: should this be cancellable by removing the job?
-                                    await NotificationBroker.ExecuteJobs.NotifyAsync(job);
-                                }
-                            );
-                        }
-                        else
-                        {
-                            shouldWaitNext = false;
-                            var beginExecutionResult = await _executor.BeginExecutionAsync
-                            (
-                                job,
-                                async (job) =>
-                                {
-                                    using (await executingJobsLock.LockAsync())
-                                    {
-                                        standbyJobs.Remove(job.Key);
-                                    }
-
-                                    await NotificationBroker.ChangedJobs.NotifyAsync(job);
-                                },
-                                _cancellationTokenSource.Token
-                            );
-
-                            if (!beginExecutionResult.IsSuccess)
-                            {
-                                // TODO figure out how to handle this state.
-                                _logger.LogResult(beginExecutionResult, $"Could not begin execution of {job.Key}");
-                            }
-                            else
-                            {
-                                using (await executingJobsLock.LockAsync())
-                                {
-                                    standbyJobs.Add(job.Key);
-                                }
-                            }
-
-                            if (job.Trigger.NextFireDate is null)
-                            {
-                                var removeResult = await _jobStore.RemoveJobAsync(job.Key);
-                                if (!removeResult.IsSuccess)
-                                {
-                                    _logger.LogResult(removeResult, $"Could not remove job {job.Key} from the store");
-                                }
-                            }
                         }
                     }
                     catch (OperationCanceledException)
                     {
-                        _logger.LogWarning("Encountered operation canceled exception");
+                        _logger.LogWarning("Encountered an operation canceled exception");
                     }
                     catch (Exception e)
                     {
@@ -237,28 +219,127 @@ namespace Christofel.Scheduling
             }
         }
 
-        private async Task<PriorityQueue<IJobDescriptor, DateTimeOffset>> CheckNotificationsAsync
-            (PriorityQueue<IJobDescriptor, DateTimeOffset> enqueuedJobs, DateTimeOffset till)
+        /// <summary>
+        /// Processes the given job, returning what was done.
+        /// </summary>
+        /// <param name="job">The job to be processed.</param>
+        /// <param name="ct">The cancellation token for the operation.</param>
+        private async Task<Result<JobExecuteState>> ProcessJobAsync(IJobDescriptor job, CancellationToken ct)
         {
-            var changeJobs = new Dictionary<JobKey, IJobDescriptor?>();
+            var fireTime = job.Trigger.NextFireDate;
+            bool notificationInterrupt = false;
 
-            if (await NotificationBroker.ExecuteJobs.HasPendingNotifications())
+            // The job is somewhere in the future, wait for it
+            // and wait for notifications.
+            if (fireTime is not null && fireTime > DateTimeOffset.UtcNow)
             {
-                (IDisposable @lock, Queue<IJobDescriptor> jobs) =
-                    await NotificationBroker.ExecuteJobs.GetNotifications();
+                using var delayedCancellationToken = new CancellationTokenSource();
+                using var connectedCancellationToken = CancellationTokenSource.CreateLinkedTokenSource
+                    (delayedCancellationToken.Token, ct);
+                delayedCancellationToken.CancelAfter((DateTimeOffset)fireTime - DateTimeOffset.UtcNow);
+                notificationInterrupt = await _workResetEvent.WaitSafeAsync(connectedCancellationToken.Token);
+            }
+            else if (fireTime is null)
+            {
+                return JobExecuteState.None;
+            }
+
+            if (notificationInterrupt)
+            {
+                // The job is still in the future, notifications have come.
+                return JobExecuteState.NotificationsInterrupt;
+            }
+            else if (!await job.Trigger.CanBeExecutedAsync())
+            {
+                await job.Trigger.RegisterReadyCallbackAsync
+                (
+                    async () =>
+                    {
+                        await NotificationBroker.ExecuteJobs.NotifyAsync((job, Result.FromSuccess()), ct);
+                    }
+                );
+
+                return JobExecuteState.RegisteredReadyCallback;
+            }
+            else
+            {
+                var beginExecutionResult = await _executor.BeginExecutionAsync
+                (
+                    job,
+                    async (returnJob, result) =>
+                    {
+                        await NotificationBroker.ExecuteJobs.NotifyAsync((returnJob, result), ct);
+                    },
+                    ct
+                );
+
+                if (!beginExecutionResult.IsSuccess)
+                {
+                    return Result<JobExecuteState>.FromError(beginExecutionResult);
+                }
+
+                return JobExecuteState.Executing;
+            }
+        }
+
+        private async Task CheckExecuteJobsNotificationsAsync
+            (PriorityQueue<IJobDescriptor, DateTimeOffset> enqueuedJobs, DateTimeOffset till, CancellationToken ct)
+        {
+            if (await NotificationBroker.ExecuteJobs.HasPendingNotifications(ct))
+            {
+                (IDisposable @lock, Queue<(IJobDescriptor Job, Result Result)> jobData) =
+                    await NotificationBroker.ExecuteJobs.GetNotifications(ct);
                 using (@lock)
                 {
-                    while (jobs.TryDequeue(out var job))
+                    while (jobData.TryDequeue(out var data))
                     {
-                        enqueuedJobs.Enqueue(job, job.Trigger.NextFireDate ?? DateTimeOffset.UtcNow);
+                        _standbyJobs.Remove(data.Job.Key);
+
+                        if (!data.Result.IsSuccess && data.Result.Error is BeforeExecutionError beginExecutionError)
+                        {
+                            if (beginExecutionError.Error is RecoverableError recoverableError)
+                            {
+                                _logger.LogError
+                                (
+                                    "A recoverable error has happened during begin execution event, the job will be added to the execution queue. {Error}",
+                                    recoverableError.Message
+                                );
+                                enqueuedJobs.Enqueue(data.Job, data.Job.Trigger.NextFireDate ?? DateTimeOffset.UtcNow);
+                            }
+                            else
+                            {
+                                _logger.LogError
+                                (
+                                    "An error has occurred during before execution events, the job won't be executed and will be removed from the execution queue. {Error}",
+                                    beginExecutionError.Message
+                                );
+                                var removeResult = await _jobStore.RemoveJobAsync(data.Job.Key);
+                                if (!removeResult.IsSuccess)
+                                {
+                                    _logger.LogResult(removeResult, $"Could not remove job {data.Job.Key}");
+                                }
+                            }
+                        }
+                        else if (data.Job.Trigger.NextFireDate <= till)
+                        {
+                            enqueuedJobs.Enqueue(data.Job, data.Job.Trigger.NextFireDate ?? DateTimeOffset.UtcNow);
+                        }
                     }
                 }
             }
+        }
 
-            if (await NotificationBroker.AddedJobs.HasPendingNotifications())
+        private async Task CheckAddedJobsNotificationsAsync
+        (
+            PriorityQueue<IJobDescriptor, DateTimeOffset> enqueuedJobs,
+            DateTimeOffset till,
+            CancellationToken ct
+        )
+        {
+            if (await NotificationBroker.AddedJobs.HasPendingNotifications(ct))
             {
                 (IDisposable @lock, Queue<IJobDescriptor> jobs) =
-                    await NotificationBroker.AddedJobs.GetNotifications();
+                    await NotificationBroker.AddedJobs.GetNotifications(ct);
                 using (@lock)
                 {
                     while (jobs.TryDequeue(out var job))
@@ -267,11 +348,20 @@ namespace Christofel.Scheduling
                     }
                 }
             }
+        }
 
-            if (await NotificationBroker.ChangedJobs.HasPendingNotifications())
+        private async Task CheckChangedJobsNotificationsAsync
+        (
+            Dictionary<JobKey, IJobDescriptor?> changeJobs,
+            PriorityQueue<IJobDescriptor, DateTimeOffset> enqueuedJobs,
+            DateTimeOffset till,
+            CancellationToken ct
+        )
+        {
+            if (await NotificationBroker.ChangedJobs.HasPendingNotifications(ct))
             {
                 (IDisposable @lock, Queue<IJobDescriptor> jobs) =
-                    await NotificationBroker.ChangedJobs.GetNotifications();
+                    await NotificationBroker.ChangedJobs.GetNotifications(ct);
                 using (@lock)
                 {
                     while (jobs.TryDequeue(out var job))
@@ -296,19 +386,32 @@ namespace Christofel.Scheduling
                         }
                         else if (storedJob != job)
                         {
-                            changeJobs[job.Key] = job.Trigger.NextFireDate > till ? null : job;
+                            changeJobs[job.Key] = job.Trigger.NextFireDate > till
+                                ? null
+                                : job;
                         }
                     }
                 }
             }
+        }
 
-            if (await NotificationBroker.RemoveJobs.HasPendingNotifications())
+        private async Task CheckRemoveJobsNotificationsAsync
+        (
+            Dictionary<JobKey, IJobDescriptor?> changeJobs,
+            PriorityQueue<IJobDescriptor, DateTimeOffset> enqueuedJobs,
+            DateTimeOffset till,
+            CancellationToken ct
+        )
+        {
+            if (await NotificationBroker.RemoveJobs.HasPendingNotifications(ct))
             {
-                (IDisposable @lock, Queue<JobKey> jobs) = await NotificationBroker.RemoveJobs.GetNotifications();
+                (IDisposable @lock, Queue<JobKey> jobs) = await NotificationBroker.RemoveJobs.GetNotifications(ct);
                 using (@lock)
                 {
                     while (jobs.TryDequeue(out var jobKey))
                     {
+                        _standbyJobs.Remove(jobKey);
+
                         var containsJob = false;
                         foreach (var x in enqueuedJobs.UnorderedItems)
                         {
@@ -326,6 +429,17 @@ namespace Christofel.Scheduling
                     }
                 }
             }
+        }
+
+        private async Task CheckNotificationsAsync
+            (PriorityQueue<IJobDescriptor, DateTimeOffset> enqueuedJobs, DateTimeOffset till, CancellationToken ct)
+        {
+            var changeJobs = new Dictionary<JobKey, IJobDescriptor?>();
+
+            await CheckExecuteJobsNotificationsAsync(enqueuedJobs, till, ct);
+            await CheckAddedJobsNotificationsAsync(enqueuedJobs, till, ct);
+            await CheckChangedJobsNotificationsAsync(changeJobs, enqueuedJobs, till, ct);
+            await CheckRemoveJobsNotificationsAsync(changeJobs, enqueuedJobs, till, ct);
 
             if (changeJobs.Count != 0)
             {
@@ -353,15 +467,39 @@ namespace Christofel.Scheduling
 
                 foreach (var storedDequeued in storedDequeuedList)
                 {
-                    enqueuedJobs.Enqueue(
+                    enqueuedJobs.Enqueue
+                    (
                         storedDequeued,
-                        storedDequeued.Trigger.NextFireDate ?? DateTimeOffset.UnixEpoch);
+                        storedDequeued.Trigger.NextFireDate ?? DateTimeOffset.UnixEpoch
+                    );
                 }
 
                 storedDequeuedList.Clear();
             }
+        }
 
-            return enqueuedJobs;
+        private enum JobExecuteState
+        {
+            /// <summary>
+            /// There was nothing done, the job should probably be removed.
+            /// </summary>
+            None,
+
+            /// <summary>
+            /// The job was not executed, the notifications were fired.
+            /// </summary>
+            NotificationsInterrupt,
+
+            /// <summary>
+            /// The job started executing successfully.
+            /// </summary>
+            Executing,
+
+            /// <summary>
+            /// The job has registered a ready callback that will be called when the job is ready,
+            /// calling the notification ExecuteJobs.
+            /// </summary>
+            RegisteredReadyCallback,
         }
     }
 }

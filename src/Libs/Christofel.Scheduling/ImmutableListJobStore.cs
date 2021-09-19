@@ -42,7 +42,7 @@ namespace Christofel.Scheduling
             var jobDescriptor = new JobDescriptor(job, trigger, job.Key);
             if (Data.Contains(jobDescriptor))
             {
-                return new InvalidOperationError("There was already item with the same name added.");
+                return new InvalidOperationError($"There was already item with the same key {job.Key} added.");
             }
 
             using (await _lock.LockAsync())

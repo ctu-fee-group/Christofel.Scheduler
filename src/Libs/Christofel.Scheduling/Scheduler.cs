@@ -79,7 +79,7 @@ namespace Christofel.Scheduling
                 return Result<IJobDescriptor>.FromError(hasJobResult);
             }
 
-            if (hasJobResult.Entity)
+            if (!hasJobResult.Entity)
             {
                 return await ScheduleAsync(job, trigger, ct);
             }

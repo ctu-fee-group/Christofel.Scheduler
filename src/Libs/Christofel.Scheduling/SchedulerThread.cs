@@ -321,7 +321,7 @@ namespace Christofel.Scheduling
                                 }
                             }
                         }
-                        else if (data.Job.Trigger.NextFireDate <= till)
+                        else if (data.Job.Trigger.NextFireDate is null || data.Job.Trigger.NextFireDate <= till)
                         {
                             enqueuedJobs.Enqueue(data.Job, data.Job.Trigger.NextFireDate ?? DateTimeOffset.UtcNow);
                         }
